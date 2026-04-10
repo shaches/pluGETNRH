@@ -1,4 +1,4 @@
-""""
+"""
 Handles the input through the pluGET command line
 """
 
@@ -51,7 +51,7 @@ def handle_input(
     :returns None:
     """
     while True:
-        # when arguemnts were not passed from console ask for input
+        # when arguments were not passed from console ask for input
         if arguments_from_console is False:
             try:
                 input_command, input_selected_object, input_parameter = get_input()
@@ -140,7 +140,7 @@ def handle_input(
             return None
 
 
-def get_input() -> str:
+def get_input() -> tuple:
     """
     Gets command line input and calls the handle input function
 
@@ -155,7 +155,7 @@ def get_input() -> str:
             input_command, input_selected_object, *input_parameter = input("pluGET >> ").split()
             break
         except ValueError:
-            if input_command == None:
+            if input_command is None:
                 # request input again if no input was given or not enough
                 continue
             else:

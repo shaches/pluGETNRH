@@ -51,17 +51,17 @@ def serverjar_purpur_check_update(file_server_jar_full_name) -> None:
     Checks the installed purpur serverjar if an update is available
     """
     serverjar_version = get_installed_serverjar_version(file_server_jar_full_name)
-    if serverjar_version == None:
+    if serverjar_version is None:
         rich_print_error("Error: An error occured while checking the installed serverjar version")
         return None
 
     version_group = get_version_group(file_server_jar_full_name)
-    if version_group == None:
+    if version_group is None:
         rich_print_error("Error: An error occured while checking the installed version group of the installed serverjar")
         return None
 
     latest_version = find_latest_available_version(version_group)
-    if latest_version == None:
+    if latest_version is None:
         rich_print_error("Error: An error occured while checking for the latest available version of the serverjar")
         return None
 
@@ -98,17 +98,17 @@ def serverjar_purpur_update(
     help_path_str = str(help_path)
     path_server_root = Path(str(path_server_root).replace(help_path_str, ''))
 
-    if file_server_jar_full_name == None and mc_version == None:
+    if file_server_jar_full_name is None and mc_version is None:
         rich_print_error("Error: Please specifiy the minecraft version as third argument!")
         return False
 
-    if mc_version == None:
+    if mc_version is None:
         mc_version = get_version_group(file_server_jar_full_name)
 
-    if server_jar_version == "latest" or server_jar_version == None:
+    if server_jar_version == "latest" or server_jar_version is None:
         server_jar_version = find_latest_available_version(mc_version)
 
-    if file_server_jar_full_name == None:
+    if file_server_jar_full_name is None:
         serverjar_name = "purpur"
     else:
         serverjar_name = file_server_jar_full_name
@@ -119,7 +119,7 @@ def serverjar_purpur_update(
         f" [cyan]→ [bright_green]{server_jar_version}"
     )
 
-    if file_server_jar_full_name != None:
+    if file_server_jar_full_name is not None:
         serverjar_version = get_installed_serverjar_version(file_server_jar_full_name)
         if get_versions_behind(serverjar_version, server_jar_version) == 0:
             rich_console.print("    [not bold][bright_green]No updates currently available!")

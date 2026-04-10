@@ -10,7 +10,7 @@ import shutil
 import re
 import uuid
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 import requests
 from rich.console import Console
@@ -191,12 +191,12 @@ def api_test_spiget() -> None:
         r = requests.get("https://api.spiget.org/v2/status", timeout=10)
         if r.status_code != 200:
             rich_print_error(
-                "Error: Problems with the API detected. Plese try it again later!"
+                "Error: Problems with the API detected. Please try it again later!"
             )
             sys.exit(1)
     except requests.exceptions.RequestException:
         rich_print_error(
-            "Error: Couldn't make a connection to the API. Check you connection to the internet!"
+            "Error: Couldn't make a connection to the API. Check your connection to the internet!"
         )
         sys.exit(1)
     return None

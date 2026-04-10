@@ -14,7 +14,7 @@ class TestCases(unittest.TestCase):
 
 
     def test_get_version_id_spiget(self):
-        # 21840 -> "Luckperms" in Version 5.4.30
+        # 28140 -> "Luckperms" in Version 5.4.30
         result = plugin_downloader.get_version_id_spiget("28140", "5.4.30")
         self.assertEqual(result, 455966)
 
@@ -31,29 +31,22 @@ class TestCases(unittest.TestCase):
             connection = "local"
             local_seperate_download_path = True
             local_path_to_seperate_download_path = "/local/path/plugins"
-        result=plugin_downloader.get_download_path(config_values_local)
+        result = plugin_downloader.get_download_path(config_values_local)
         self.assertEqual(result, config_values_local.local_path_to_seperate_download_path)
 
-        # plugin folder over sftp
-        class config_values_sftp:
-            connection = "sftp"
-            remote_seperate_download_path = True
-            remote_path_to_seperate_download_path = "/sftp/path/plugins"
-        result=plugin_downloader.get_download_path(config_values_sftp)
-        self.assertEqual(result, config_values_sftp.remote_path_to_seperate_download_path)
-
-        # plugin folder over ftp
-        class config_values_ftp:
-            connection = "ftp"
-            remote_seperate_download_path = True
-            remote_path_to_seperate_download_path = "/ftp/path/plugins"
-        result=plugin_downloader.get_download_path(config_values_ftp)
-        self.assertEqual(result, config_values_ftp.remote_path_to_seperate_download_path)
+        # local plugin folder without separate download path
+        class config_values_no_separate:
+            connection = "local"
+            local_seperate_download_path = False
+            local_path_to_seperate_download_path = "/local/separate/path"
+            path_to_plugin_folder = "/local/path/plugins"
+        result = plugin_downloader.get_download_path(config_values_no_separate)
+        self.assertEqual(result, config_values_no_separate.path_to_plugin_folder)
 
 
     def test_convert_file_size_down(self):
         # 100000 / 1024 = 97.66
-        result= utilities.convert_file_size_down(100000)
+        result = utilities.convert_file_size_down(100000)
         self.assertEqual(result, 97.66)
 
 

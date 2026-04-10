@@ -46,7 +46,7 @@ def check_update_available_installed_server_jar() -> None:
     """
     config_values = config_value()
     file_server_jar_full_name = get_installed_server_jar_file(config_values)
-    if file_server_jar_full_name == None:
+    if file_server_jar_full_name is None:
         # print error and exit function
         rich_print_error("Error: Serverjar couldn't be found")
         return None
@@ -76,7 +76,7 @@ def update_installed_server_jar(server_jar_version: str="latest") -> None:
     """
     config_values = config_value()
     file_server_jar_full_name = get_installed_server_jar_file(config_values)
-    if file_server_jar_full_name == None:
+    if file_server_jar_full_name is None:
         # print error and exit function
         rich_print_error("Error: Serverjar couldn't be found")
         return None
@@ -90,23 +90,23 @@ def update_installed_server_jar(server_jar_version: str="latest") -> None:
 
     server_jar_path = f"{path_server_root}/{file_server_jar_full_name}"
     rich_console = Console()
-    download_successfull = False
+    download_successful = False
     # TODO: Add other serverjars here
     # Paper / Velocity / Waterfall
     if "paper" in file_server_jar_full_name or \
         "waterfall" in file_server_jar_full_name or \
         "velocity" in file_server_jar_full_name:
-        download_successfull = serverjar_papermc_update(server_jar_version, None, file_server_jar_full_name, None)
+        download_successful = serverjar_papermc_update(server_jar_version, None, file_server_jar_full_name, None)
 
     # Purpur
     elif "purpur" in file_server_jar_full_name:
-        download_successfull = serverjar_purpur_update(server_jar_version, None, file_server_jar_full_name)
+        download_successful = serverjar_purpur_update(server_jar_version, None, file_server_jar_full_name)
 
     else:
         rich_print_error(f"[not bold]Error: [bright_magenta]{file_server_jar_full_name} [bright_red]isn't supported")
 
-    # remove old serverjar when the serverjar was sucessfully updated
-    if download_successfull is True:
+    # remove old serverjar when the serverjar was successfully updated
+    if download_successful is True:
         os.remove(Path(server_jar_path))
         rich_console.print(
             "    [not bold][bright_green]Deleted old server file [cyan]→ [white]" +

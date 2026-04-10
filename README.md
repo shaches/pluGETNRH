@@ -1,3 +1,3 @@
 # 🚚💨 pluGETNRH(No Remote Hosts)
  
-This repository is still under constraction.
+This repository is still under construction.
