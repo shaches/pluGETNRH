@@ -23,17 +23,27 @@ def handle_regex_plugin_name(full_plugin_name) -> str:
     """
     Return the plugin name after trimming clutter from name with regex operations
     """
-    unwanted_plugin_name = re.search(r'(^\[+[a-zA-Z0-9\s\W*\.*\-*\+*\%*\,]*\]+)', full_plugin_name)
-    if bool(unwanted_plugin_name):
+    unwanted_plugin_name_string = ""
+    
+    # 1. Replaced redundant character classes with a safe negated character class.
+    # Original: r'(^\[+[a-zA-Z0-9\s\W*\.*\-*\+*\%*\,]*\]+)'
+    unwanted_plugin_name = re.search(r'^\[+[^\]]*\]+', full_plugin_name)
+    if unwanted_plugin_name:
         unwanted_plugin_name_string = unwanted_plugin_name.group()
         full_plugin_name = full_plugin_name.replace(unwanted_plugin_name_string, '')
 
-    plugin_name = re.search(r'([a-zA-Z]\d*)+(\s?\-*\_*[a-zA-Z]\d*\+*\-*\'*)+', full_plugin_name)
+    # 2. Removed nested quantifiers to prevent catastrophic backtracking (ReDoS).
+    # Original: r'([a-zA-Z]\d*)+(\s?\-*\_*[a-zA-Z]\d*\+*\-*\'*)+'
+    # The new pattern strictly limits repetition grouping to non-overlapping sequences.
+    plugin_name = re.search(r'[a-zA-Z][a-zA-Z0-9]*(?:[\s\-_]+[a-zA-Z][a-zA-Z0-9]*)*[+\-\']*', full_plugin_name)
+    
     try:
         plugin_name_full_string = plugin_name.group()
         found_plugin_name = plugin_name_full_string.replace(' ', '')
     except AttributeError:
-        found_plugin_name = unwanted_plugin_name_string
+        # Prevented UnboundLocalError if the prefix match previously failed
+        found_plugin_name = unwanted_plugin_name_string if unwanted_plugin_name_string else full_plugin_name.strip()
+        
     return found_plugin_name
 
 
