@@ -2,6 +2,8 @@
 File and functions which handle the download of the specific plugins
 """
 
+# TODO: Supply Chain Vulnerability (Lack of Artifact Verification)
+
 import os
 import re
 from pathlib import Path

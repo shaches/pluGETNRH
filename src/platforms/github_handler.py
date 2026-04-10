@@ -2,6 +2,8 @@
 Handles GitHub plugin checking, downloading and updating
 """
 
+# TODO: Supply Chain Vulnerability (Lack of Artifact Verification)
+
 import re
 from pathlib import Path
 
