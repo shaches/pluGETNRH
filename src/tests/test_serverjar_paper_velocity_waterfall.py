@@ -38,5 +38,17 @@ class TestCases(unittest.TestCase):
         self.assertEqual(result, 4)
 
 
+    def test_get_papermc_download_file_name(self):
+        # Verifies that the API returns the correct filename and a sha256 hash
+        mc_version = "1.15.2"
+        serverjar_version = "393"
+        file_server_jar_full_name = "paper-1.15.2-40.jar"
+        download_name, expected_hash = serverjar_paper_velocity_waterfall.get_papermc_download_file_name(
+            mc_version, serverjar_version, file_server_jar_full_name
+        )
+        self.assertEqual(download_name, "paper-1.15.2-393.jar")
+        self.assertIsNotNone(expected_hash)
+
+
 if __name__ == "__main__":
     unittest.main()

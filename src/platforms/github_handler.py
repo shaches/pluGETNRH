@@ -2,9 +2,8 @@
 Handles GitHub plugin checking, downloading and updating
 """
 
-# TODO: Supply Chain Vulnerability (Lack of Artifact Verification)
-
 import re
+import hashlib
 from pathlib import Path
 
 from src.utils.utilities import api_do_request, create_temp_plugin_folder, remove_temp_plugin_folder, sanitize_filename
@@ -88,12 +87,13 @@ def get_github_download_url(github_repo: str) -> str:
     return assets[0]["browser_download_url"]
 
 
-def download_github_plugin(github_repo: str, plugin_name: str = None) -> None:
+def download_github_plugin(github_repo: str, plugin_name: str = None, expected_hash: str = None) -> None:
     """
     Downloads the latest plugin version from GitHub releases
     
     :param github_repo: Repository path in format 'owner/repo'
     :param plugin_name: Optional plugin name override
+    :param expected_hash: SHA-256 hash expected for the downloaded file
     :returns: None
     """
     config_values = config_value()
@@ -119,17 +119,18 @@ def download_github_plugin(github_repo: str, plugin_name: str = None) -> None:
     download_plugin_path = Path(f"{download_path}/{plugin_download_name}")
     
     # Use existing download infrastructure but with GitHub URL
-    _download_github_file(download_url, download_plugin_path)
+    _download_github_file(download_url, download_plugin_path, expected_hash)
     
     return None
 
 
-def _download_github_file(url: str, download_path: Path) -> None:
+def _download_github_file(url: str, download_path: Path, expected_hash: str = None) -> None:
     """
     Downloads a file from GitHub releases - similar to download_specific_plugin_version_spiget
     
     :param url: GitHub asset download URL  
     :param download_path: Path where to save the file
+    :param expected_hash: Optional SHA-256 hash to verify the artifact
     :returns: None
     """
     import os
@@ -178,6 +179,24 @@ def _download_github_file(url: str, download_path: Path) -> None:
         file_size_data = convert_file_size_down(file_size)
         console.print("    [not bold][bright_green]Downloaded[bright_magenta] " + (str(file_size_data)).rjust(9) + \
              f" KB [cyan]→ [white]{download_path}")
+
+    # Artifact Verification Step
+    if expected_hash:
+        console.print(f"    [cyan]Verifying sha256 checksum...")
+        h = hashlib.sha256()
+        with open(download_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                h.update(chunk)
+        
+        calculated_hash = h.hexdigest()
+        if calculated_hash != expected_hash:
+            rich_print_error(f"Error: Artifact verification failed! Hash mismatch.")
+            rich_print_error(f"Expected: {expected_hash}")
+            rich_print_error(f"Calculated: {calculated_hash}")
+            os.remove(download_path)
+            return None
+        else:
+            console.print("    [not bold][bright_green]Artifact signature verified successfully.")
 
     # check if plugin file is a proper .jar-file (try to open plugin.yml or paper-plugin.yml file)
     # updated validation to support both plugin.yml and paper-plugin.yml

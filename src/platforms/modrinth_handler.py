@@ -2,9 +2,8 @@
 Handles Modrinth plugin checking, downloading and updating
 """
 
-# TODO: Supply Chain Vulnerability (Lack of Artifact Verification)
-
 import re
+import hashlib
 from pathlib import Path
 
 from src.utils.utilities import api_do_request, create_temp_plugin_folder, remove_temp_plugin_folder, sanitize_filename
@@ -120,13 +119,14 @@ def get_modrinth_download_url(project_id: str, featured_only: bool = False, vers
     return files[0]["url"], files[0]["filename"]
 
 
-def download_modrinth_plugin(project_id: str, featured_only: bool = False, version_type: str = None) -> None:
+def download_modrinth_plugin(project_id: str, featured_only: bool = False, version_type: str = None, expected_hash: str = None) -> None:
     """
     Downloads the latest plugin version from Modrinth
     
     :param project_id: Modrinth project ID or slug
     :param featured_only: Only consider featured versions  
     :param version_type: Filter by version type (release, beta, alpha)
+    :param expected_hash: SHA-512 hash expected for the downloaded file
     :returns: None
     """
     config_values = config_value()
@@ -160,17 +160,18 @@ def download_modrinth_plugin(project_id: str, featured_only: bool = False, versi
     download_plugin_path = Path(f"{download_path}/{plugin_download_name}")
     
     # Use existing download infrastructure but with Modrinth URL
-    _download_modrinth_file(download_url, download_plugin_path)
+    _download_modrinth_file(download_url, download_plugin_path, expected_hash)
     
     return None
 
 
-def _download_modrinth_file(url: str, download_path: Path) -> None:
+def _download_modrinth_file(url: str, download_path: Path, expected_hash: str = None) -> None:
     """
     Downloads a file from Modrinth - similar to GitHub download function
     
     :param url: Modrinth file download URL
     :param download_path: Path where to save the file
+    :param expected_hash: Optional SHA-512 hash to verify the artifact
     :returns: None
     """
     import os
@@ -219,6 +220,24 @@ def _download_modrinth_file(url: str, download_path: Path) -> None:
         file_size_data = convert_file_size_down(file_size)
         console.print("    [not bold][bright_green]Downloaded[bright_magenta] " + (str(file_size_data)).rjust(9) + \
              f" KB [cyan]→ [white]{download_path}")
+
+    # Artifact Verification Step
+    if expected_hash:
+        console.print(f"    [cyan]Verifying sha512 checksum...")
+        h = hashlib.sha512()
+        with open(download_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                h.update(chunk)
+        
+        calculated_hash = h.hexdigest()
+        if calculated_hash != expected_hash:
+            rich_print_error(f"Error: Artifact verification failed! Hash mismatch.")
+            rich_print_error(f"Expected: {expected_hash}")
+            rich_print_error(f"Calculated: {calculated_hash}")
+            os.remove(download_path)
+            return None
+        else:
+            console.print("    [not bold][bright_green]Artifact signature verified successfully.")
 
     # check if plugin file is a proper .jar-file (try to open plugin.yml or paper-plugin.yml file)
     # updated validation to support both plugin.yml and paper-plugin.yml

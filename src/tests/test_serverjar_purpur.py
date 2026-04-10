@@ -36,5 +36,15 @@ class TestCases(unittest.TestCase):
         self.assertEqual(result, 4)
 
 
+    def test_get_purpur_download_file_name(self):
+        # Verifies that the API returns the correct filename and an md5 hash
+        mc_version = "1.15.2"
+        serverjar_version = "606"
+        download_name, expected_hash = serverjar_purpur.get_purpur_download_file_name(mc_version, serverjar_version)
+        
+        self.assertEqual(download_name, "purpur-1.15.2-606.jar")
+        self.assertIsNotNone(expected_hash)
+
+
 if __name__ == "__main__":
     unittest.main()

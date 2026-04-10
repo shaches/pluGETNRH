@@ -5,7 +5,9 @@ Paper, Velocity, Waterfall
 All are from the PaperMC Team and use the same api structure which is the reason these are together
 """
 
+import os
 import re
+import hashlib
 import requests
 from pathlib import Path
 from rich.table import Table
@@ -21,10 +23,6 @@ from src.utils.utilities import \
 def get_installed_serverjar_version(file_server_jar_full_name) -> str:
     """
     Gets the installed version of the installed serverjar
-
-    :param file_server_jar_full_name: Full file name fo the installed serverjar
-
-    :returns: Used serverjar version
     """
     serverjar_version_full = re.search(r"([\d]*.jar)", file_server_jar_full_name)
     try:
@@ -39,10 +37,6 @@ def get_installed_serverjar_version(file_server_jar_full_name) -> str:
 def get_version_group(file_server_jar_full_name) -> str:
     """
     Gets the version group which is used for the papermc api
-
-    :param mc_version: Version of Minecraft in use
-
-    :returns: Version group of api
     """
     version_group = re.sub(r"-\d*.jar$", "", file_server_jar_full_name)
     version_group = re.sub(r"^(\w*\-)", "", version_group)
@@ -52,10 +46,6 @@ def get_version_group(file_server_jar_full_name) -> str:
 def find_latest_available_version(file_server_jar_full_name, version_group) -> int:
     """
     Gets the latest available version of the installed serverjar version
-
-    :param version_group: Minecraft version group of the serverjar
-
-    :returns: Latest available version as int
     """
     if "paper" in file_server_jar_full_name:
         url = f"https://api.papermc.io/v2/projects/paper/versions/{version_group}/builds"
@@ -65,7 +55,7 @@ def find_latest_available_version(file_server_jar_full_name, version_group) -> i
         url = f"https://api.papermc.io/v2/projects/velocity/versions/{version_group}/builds"
 
     versions = api_do_request(url)
-    if "status" in versions: # Checks if the API returns a status. This means that there was an error.
+    if "status" in versions: 
         return None
     latest_version = versions["builds"][-1]["build"]
     return latest_version
@@ -74,25 +64,14 @@ def find_latest_available_version(file_server_jar_full_name, version_group) -> i
 def get_versions_behind(serverjar_version, latest_version) -> int:
     """
     Gets the number diffference between the two versions
-
-    :param serverjar_version: Installed serverjar version
-    :param latest_version: Latest avaialable serverjar version
-
-    :returns: Number difference between the two versions
     """
     versions_behind = int(latest_version) - int(serverjar_version)
     return versions_behind
 
 
-def get_papermc_download_file_name(mc_version, serverjar_version, file_server_jar_full_name) -> str:
+def get_papermc_download_file_name(mc_version, serverjar_version, file_server_jar_full_name) -> tuple:
     """
-    Gets the download name from the papermc api
-
-    :param mc_version: Minecraft version
-    :param serverjar_version: Version of the serverjar
-    :param file_server_jar_full_name: Serverjar name
-
-    :returns: Download name of the file
+    Gets the download name and expected hash from the papermc api
     """
     if "paper" in file_server_jar_full_name:
         url = f"https://api.papermc.io/v2/projects/paper/versions/{mc_version}/builds/{serverjar_version}"
@@ -102,16 +81,13 @@ def get_papermc_download_file_name(mc_version, serverjar_version, file_server_ja
         url = f"https://api.papermc.io/v2/projects/velocity/versions/{mc_version}/builds/{serverjar_version}"
     build_details = api_do_request(url)
     download_name = sanitize_filename(build_details["downloads"]["application"]["name"])
-    return download_name
+    expected_hash = build_details["downloads"]["application"].get("sha256")
+    return download_name, expected_hash
 
 
 def serverjar_papermc_check_update(file_server_jar_full_name) -> None:
     """
     Checks the installed paper serverjar if an update is available
-    
-    :param file_server_jar_full_name: Full name of the paper server jar file name
-
-    :returns: None
     """
     serverjar_version = get_installed_serverjar_version(file_server_jar_full_name)
     if serverjar_version == None:
@@ -120,9 +96,7 @@ def serverjar_papermc_check_update(file_server_jar_full_name) -> None:
     
     version_group = get_version_group(file_server_jar_full_name)
     if version_group == None:
-        rich_print_error(
-            "Error: An error occured while checking the installed version group of the installed serverjar"
-        )
+        rich_print_error("Error: An error occured while checking the installed version group of the installed serverjar")
         return None
 
     latest_version = find_latest_available_version(file_server_jar_full_name, version_group)
@@ -156,30 +130,18 @@ def serverjar_papermc_update(
     serverjar_to_download: str=None
     ) -> bool:
     """
-    Handles the downloading of the papermc serverjar
-
-    :param server_jar_version: Version of the serverjar which should get downloaded
-    :param mc_version: Minecraft version
-    :param no_confirmation: If no confirmation message should pop up
-    :param file_server_jar_full_name: The old serverjar file
-    :param serverjar_to_download: The serverjar to download because it supports: paper, velocity, waterfall
-                                This is used in the handle_input function
-
-    :returns: True/False if the serverjar was downloaded successfully
+    Handles the downloading of the papermc serverjar and verifies its artifact signature
     """
     config_values = config_value()
     path_server_root = config_values.path_to_plugin_folder
-    # need help_path or else TypeError will be thrown
     help_path = Path('/plugins')
     help_path_str = str(help_path)
     path_server_root = Path(str(path_server_root).replace(help_path_str, ''))
 
-    # exit if the mc version can't be found
     if file_server_jar_full_name == None and mc_version == None:
         rich_print_error("Error: Please specifiy the minecraft version as third argument!")
         return False
 
-    # if both the file name and the serverjar_to_download are emtpy then exit
     if file_server_jar_full_name == None and serverjar_to_download == None:
         rich_print_error("Error: Couldn't get serverjar name to download")
         return False
@@ -195,7 +157,6 @@ def serverjar_papermc_update(
     if server_jar_version == "latest" or server_jar_version == None:
         server_jar_version = find_latest_available_version(papermc_serverjar, mc_version)
 
-    # use rich console for nice colors
     rich_console = Console()
     rich_console.print(
         f"\n [not bold][bright_white]● [bright_magenta]{papermc_serverjar.capitalize()}" + \
@@ -209,28 +170,23 @@ def serverjar_papermc_update(
             return False
 
     try:
-        download_file_name = get_papermc_download_file_name(mc_version, server_jar_version, papermc_serverjar)
+        download_file_name, expected_hash = get_papermc_download_file_name(mc_version, server_jar_version, papermc_serverjar)
     except KeyError:
         rich_print_error(f"    Error: This version wasn't found for {mc_version}")
         rich_print_error(f"    Reverting to latest version for {mc_version}")
         try:
             server_jar_version = find_latest_available_version(papermc_serverjar, mc_version)
-            download_file_name = get_papermc_download_file_name(mc_version, server_jar_version, papermc_serverjar)
+            download_file_name, expected_hash = get_papermc_download_file_name(mc_version, server_jar_version, papermc_serverjar)
         except KeyError:
-            rich_print_error(
-                f"    Error: Version {mc_version} wasn't found for {papermc_serverjar.capitalize()} in the papermc api"
-            )
+            rich_print_error(f"    Error: Version {mc_version} wasn't found for {papermc_serverjar.capitalize()} in the papermc api")
             return False
 
     if "paper" in papermc_serverjar:
-        url = f"https://api.papermc.io/v2/projects/paper/versions/{mc_version}" + \
-            f"/builds/{server_jar_version}/downloads/{download_file_name}"
+        url = f"https://api.papermc.io/v2/projects/paper/versions/{mc_version}/builds/{server_jar_version}/downloads/{download_file_name}"
     elif "waterfall" in papermc_serverjar:
-        url = f"https://api.papermc.io/v2/projects/waterfall/versions/{mc_version}" + \
-            f"/builds/{server_jar_version}/downloads/{download_file_name}"
+        url = f"https://api.papermc.io/v2/projects/waterfall/versions/{mc_version}/builds/{server_jar_version}/downloads/{download_file_name}"
     elif "velocity" in papermc_serverjar:
-        url = f"https://api.papermc.io/v2/projects/velocity/versions/{mc_version}" + \
-            f"/builds/{server_jar_version}/downloads/{download_file_name}"
+        url = f"https://api.papermc.io/v2/projects/velocity/versions/{mc_version}/builds/{server_jar_version}/downloads/{download_file_name}"
     
     download_path = Path(f"{path_server_root}/{download_file_name}")
 
@@ -239,16 +195,12 @@ def serverjar_papermc_update(
         r = requests.get(url, headers=header, stream=True, timeout=30)
         try:
             file_size = int(r.headers.get('Content-Length'))
-            # create progress bar
             download_task = progress.add_task("    [cyan]Downloading...", total=file_size)
         except TypeError:
-            # Content-lenght returned nothing
             file_size = 0
         with open(download_path, 'wb') as f:
-            # split downloaded data in chunks of 65536
             for data in r.iter_content(chunk_size=65536):
                 f.write(data)
-                # don't show progress bar if no content-length was returned
                 if file_size == 0:
                     continue
                 progress.update(download_task, advance=len(data))
@@ -257,5 +209,23 @@ def serverjar_papermc_update(
     file_size_data = convert_file_size_down(convert_file_size_down(file_size))
     rich_console.print("    [not bold][bright_green]Downloaded[bright_magenta] " + (str(file_size_data)).rjust(9) + \
         f" MB [cyan]→ [white]{download_path}")
+
+    # Verify Cryptographic Hash
+    if expected_hash:
+        rich_console.print("    [cyan]Verifying sha256 checksum...")
+        h = hashlib.sha256()
+        with open(download_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                h.update(chunk)
+        
+        calculated_hash = h.hexdigest()
+        if calculated_hash != expected_hash:
+            rich_print_error("Error: Artifact verification failed! Hash mismatch.")
+            rich_print_error(f"Expected: {expected_hash}")
+            rich_print_error(f"Calculated: {calculated_hash}")
+            os.remove(download_path)
+            return False
+        else:
+            rich_console.print("    [not bold][bright_green]Artifact signature verified successfully.")
 
     return True
