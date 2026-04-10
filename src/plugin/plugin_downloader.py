@@ -6,6 +6,7 @@ import os
 import re
 from pathlib import Path
 import requests
+import zipfile
 from zipfile import ZipFile
 
 from rich.table import Table
@@ -13,7 +14,7 @@ from rich.console import Console
 from rich.progress import Progress
 
 from src.utils.utilities import convert_file_size_down, remove_temp_plugin_folder, create_temp_plugin_folder
-from src.utils.utilities import api_do_request
+from src.utils.utilities import api_do_request, sanitize_filename
 from src.utils.console_output import rich_print_error
 from src.handlers.handle_config import config_value
 from src.handlers.handle_sftp import sftp_create_connection, sftp_upload_file
@@ -113,7 +114,7 @@ def download_specific_plugin_version_spiget(plugin_id, download_path, version_id
     # use rich Progress() to create progress bar
     with Progress(transient=True) as progress:
         header = {'user-agent': 'pluGET/1.0'}
-        r = requests.get(url, headers=header, stream=True)
+        r = requests.get(url, headers=header, stream=True, timeout=30)
         try:
             file_size = int(r.headers.get('content-length'))
             # create progress bar
@@ -150,7 +151,7 @@ def download_specific_plugin_version_spiget(plugin_id, download_path, version_id
     try:
         with ZipFile(download_path, "r") as plugin_jar:
             plugin_jar.open("plugin.yml", "r")
-    except:
+    except (KeyError, zipfile.BadZipFile, OSError) as err:
         rich_print_error("Error: Downloaded plugin file was not a proper jar-file! Premium plugins are not supported!")
         rich_print_error("Removing file...")
         os.remove(download_path)
@@ -193,7 +194,7 @@ def get_specific_plugin_spiget(plugin_id: str, plugin_version: str = "latest") -
     plugin_name = handle_regex_plugin_name(plugin_name)
     plugin_version_id: str | None = get_version_id_spiget(plugin_id, plugin_version)
     plugin_version_name: str | None = get_version_name_spiget(plugin_id, plugin_version_id)
-    plugin_download_name = f"{plugin_name}-{plugin_version_name}.jar"
+    plugin_download_name = sanitize_filename(f"{plugin_name}-{plugin_version_name}.jar")
     download_plugin_path = Path(f"{download_path}/{plugin_download_name}")
     # if api requests weren't successfull stop function
     if not plugin_version_id or not plugin_version_name:
@@ -204,7 +205,7 @@ def get_specific_plugin_spiget(plugin_id: str, plugin_version: str = "latest") -
         plugin_version_id = None
     try:
         download_specific_plugin_version_spiget(plugin_id, download_plugin_path, plugin_version_id)
-    except:
+    except Exception:
         if config_values.connection != "local":
             remove_temp_plugin_folder()
         raise
@@ -264,5 +265,5 @@ def search_specific_plugin_spiget(plugin_name) -> None:
     rich_console.print(f"\n [not bold][bright_white]● [bright_magenta]{selected_plugin_name} [bright_green]latest")
     try:
         get_specific_plugin_spiget(plugin_selected_id)
-    except:
+    except Exception:
         pass

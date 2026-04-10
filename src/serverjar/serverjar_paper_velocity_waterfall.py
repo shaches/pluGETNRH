@@ -17,7 +17,7 @@ from src.utils.console_output import rich_print_error
 from src.handlers.handle_sftp import sftp_create_connection, sftp_upload_server_jar
 from src.handlers.handle_ftp import ftp_create_connection, ftp_upload_server_jar
 from src.utils.utilities import \
-    api_do_request, create_temp_plugin_folder, remove_temp_plugin_folder, convert_file_size_down
+    api_do_request, create_temp_plugin_folder, remove_temp_plugin_folder, convert_file_size_down, sanitize_filename
 
 
 def get_installed_serverjar_version(file_server_jar_full_name) -> str:
@@ -103,7 +103,7 @@ def get_papermc_download_file_name(mc_version, serverjar_version, file_server_ja
     elif "velocity" in file_server_jar_full_name:
         url = f"https://api.papermc.io/v2/projects/velocity/versions/{mc_version}/builds/{serverjar_version}"
     build_details = api_do_request(url)
-    download_name = build_details["downloads"]["application"]["name"]
+    download_name = sanitize_filename(build_details["downloads"]["application"]["name"])
     return download_name
 
 
@@ -242,7 +242,7 @@ def serverjar_papermc_update(
 
     with Progress(transient=True) as progress:
         header = {'user-agent': 'pluGET/1.0'}
-        r = requests.get(url, headers=header, stream=True)
+        r = requests.get(url, headers=header, stream=True, timeout=30)
         try:
             file_size = int(r.headers.get('Content-Length'))
             # create progress bar

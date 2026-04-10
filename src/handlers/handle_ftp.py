@@ -3,7 +3,7 @@ import sys
 import ftplib
 import re
 
-from src.utils.console_output import rich_print_error
+from src.utils.console_output import rich_print_error, rich_print_warning
 from src.handlers.handle_config import config_value
 
 
@@ -15,14 +15,23 @@ def ftp_create_connection():
     """
     config_values = config_value()
     try:
-        ftp = ftplib.FTP()
+        ftp = ftplib.FTP_TLS()
         ftp.connect(config_values.server, config_values.ftp_port)
         ftp.login(config_values.username, config_values.password)
+        ftp.prot_p()
         return ftp
-    except UnboundLocalError:
-        rich_print_error("Error: [SFTP]: Check your config file!")
-        rich_print_error("Exiting program...")
-        sys.exit()
+    except Exception:
+        rich_print_warning("Warning: [FTP]: TLS connection failed. Falling back to plain FTP.")
+        rich_print_warning("         Credentials will be sent in plaintext!")
+        try:
+            ftp = ftplib.FTP()
+            ftp.connect(config_values.server, config_values.ftp_port)
+            ftp.login(config_values.username, config_values.password)
+            return ftp
+        except Exception:
+            rich_print_error("Error: [FTP]: Check your config file!")
+            rich_print_error("Exiting program...")
+            sys.exit()
 
 
 def ftp_show_plugins(ftp) -> None:
@@ -56,16 +65,13 @@ def ftp_upload_file(ftp, path_item) -> None:
         path_upload_folder = config_values.remote_plugin_folder_on_server
     try:
         ftp.cwd(path_upload_folder)
-        path_item = os.path.relpath(path_item, 'TempSFTPFolder/')
-        path_item = str(path_item)
-        current_directory = os.getcwd()
-        os.chdir('TempSFTPFolder')
-        with open (path_item, 'rb') as plugin_file:
-            ftp.storbinary('STOR '+ str(path_item), plugin_file)
+        file_name = os.path.basename(str(path_item))
+        abs_path = os.path.abspath(path_item)
+        with open(abs_path, 'rb') as plugin_file:
+            ftp.storbinary('STOR ' + file_name, plugin_file)
     except FileNotFoundError:
         rich_print_error("Error: [FTP]: The 'plugins' folder couldn't be found on the remote host!")
         rich_print_error("Error: [FTP]: Aborting uploading.")
-    os.chdir(current_directory)
     ftp.close()
     return None
 
@@ -81,16 +87,13 @@ def ftp_upload_server_jar(ftp, path_item) -> None:
     """
     try:
         ftp.cwd('.')
-        path_item = os.path.relpath(path_item, 'TempSFTPFolder/')
-        path_item = str(path_item)
-        current_directory = os.getcwd()
-        os.chdir('TempSFTPFolder')
-        with open (path_item, 'rb') as server_jar:
-            ftp.storbinary('STOR '+ str(path_item), server_jar)
+        file_name = os.path.basename(str(path_item))
+        abs_path = os.path.abspath(path_item)
+        with open(abs_path, 'rb') as server_jar:
+            ftp.storbinary('STOR ' + file_name, server_jar)
     except FileNotFoundError:
         rich_print_error("Error: [FTP]: The 'root' folder couldn't be found on the remote host!")
         rich_print_error("Error: [FTP]: Aborting uploading.")
-    os.chdir(current_directory)
     ftp.close()
     return None
 
@@ -181,7 +184,7 @@ def ftp_validate_file_attributes(ftp, plugin_path) -> bool:
     """
     if ftp_is_file(ftp, plugin_path) is False:
         return False
-    if re.search(r'.jar$', plugin_path):
+    if re.search(r'\.jar$', plugin_path):
         return True
     else:
         return False

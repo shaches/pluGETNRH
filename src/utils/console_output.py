@@ -3,6 +3,7 @@ Handles the console on first startup of pluGET and prints logo and sets title
 """
 
 import os
+import subprocess
 from rich.console import Console
 
 from src.settings import PLUGETVERSION
@@ -31,7 +32,14 @@ def rename_console_title() -> None:
     Renames the console title on first startup
     """
     if os.name == "nt":
-        os.system("title " + "pluGET │ By Neocky")
+        try:
+            import ctypes
+            ctypes.windll.kernel32.SetConsoleTitleW("pluGET │ By Neocky")
+        except Exception:
+            pass
+    else:
+        # ANSI escape sequence to set terminal title on Linux/macOS
+        print("\033]0;pluGET │ By Neocky\007", end="", flush=True)
     return None
 
 
@@ -39,7 +47,11 @@ def clear_console() -> None:
     """
     Clears the console on first startup
     """
-    os.system('cls' if os.name=='nt' else 'clear')
+    if os.name == "nt":
+        subprocess.run(["cmd", "/c", "cls"], shell=False)
+    else:
+        # ANSI escape sequence to clear screen — works without requiring 'clear' binary
+        print("\033[H\033[2J", end="", flush=True)
     return None
 
 

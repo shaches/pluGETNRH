@@ -223,7 +223,7 @@ def ask_update_confirmation(input_selected_object : str) -> bool:
         if plugin_file.plugin_is_outdated == False:
             continue
         if input_selected_object != "all" and input_selected_object != "*":
-            if re.search(input_selected_object, plugin_file.plugin_file_name, re.IGNORECASE):
+            if re.search(re.escape(input_selected_object), plugin_file.plugin_file_name, re.IGNORECASE):
                 rich_console.print(f"[not bold][bright_magenta]{plugin_file.plugin_name}", end=' ')
                 break
         rich_console.print(f"[not bold][bright_magenta]{plugin_file.plugin_name}", end=' ')
@@ -284,7 +284,7 @@ def egg_cracking_jar(plugin_file_name: str) -> str:
         plugin_name = plugin_version = ""        
     except zipfile.BadZipFile:
         plugin_name = plugin_version = ""
-    except:
+    except Exception:
         plugin_name = plugin_version = ""
 
     # remove temp plugin folder if plugin was downloaded from sftp/ftp server
@@ -331,7 +331,7 @@ def check_update_available_installed_plugins(input_selected_object: str, config_
             case _:
                 if not os.path.isfile(Path(f"{plugin_folder_path}/{plugin_file}")):
                     plugin_attributes = False
-                if not re.search(r'.jar$', plugin_file):
+                if not re.search(r'\.jar$', plugin_file):
                     plugin_attributes = False
         # skip plugin if no attributes were found to skip not valid plugin files
         if plugin_attributes == False:
@@ -340,7 +340,7 @@ def check_update_available_installed_plugins(input_selected_object: str, config_
         plugin_file_name = get_plugin_file_name(plugin_file)
         # supports command 'check pluginname' and skip the checking of every other plugin to speed things up a bit
         if input_selected_object != "all" and input_selected_object != "*":
-            if not re.search(input_selected_object, plugin_file_name, re.IGNORECASE):
+            if not re.search(re.escape(input_selected_object), plugin_file_name, re.IGNORECASE):
                 continue
 
         plugin_file_version = get_plugin_file_version(plugin_file)
@@ -469,7 +469,7 @@ def update_installed_plugins(input_selected_object : str="all", no_confirmation 
     for plugin in INSTALLEDPLUGINLIST:
         # supports command 'update pluginname' and skip the updating of every other plugin to speed things up a bit
         if input_selected_object != "all" and input_selected_object != "*":
-            if not re.search(input_selected_object, plugin.plugin_file_name, re.IGNORECASE):
+            if not re.search(re.escape(input_selected_object), plugin.plugin_file_name, re.IGNORECASE):
                 plugins_skipped += 1
                 continue
 
@@ -502,7 +502,8 @@ def update_installed_plugins(input_selected_object : str="all", no_confirmation 
                             )
                             plugins_updated -= 1
                             continue
-                        except:
+                        except Exception as err:
+                            rich_print_error(f"Error: {err}")
                             plugins_updated -= 1
                             continue
 
@@ -559,7 +560,8 @@ def update_installed_plugins(input_selected_object : str="all", no_confirmation 
                             )
                             plugins_updated -= 1
                             continue
-                        except:
+                        except Exception as err:
+                            rich_print_error(f"Error: {err}")
                             plugins_updated -= 1
                             continue
 
@@ -697,7 +699,7 @@ def search_plugin_spiget(plugin_file: str, plugin_file_name: str, plugin_file_ve
                     plugin_is_outdated = False
                     try:
                         plugin_is_outdated = compare_plugin_version(plugin_latest_version, update_version_name)
-                    except:
+                    except Exception:
                     # if we haven't found the correct version and we have thrown an error
                     # then the plugin_is_outdated is titled as false
                     # and if the difference is more than 1 version apart then the plugin is titled as outdated
@@ -745,7 +747,7 @@ def search_plugin_modrinth(plugin_file: str, plugin_file_name: str, plugin_file_
                     plugin_is_outdated = False
                     try:
                         plugin_is_outdated = compare_plugin_version(plugin_latest_version, plugin_file_version)
-                    except:
+                    except Exception:
                         # If version comparison fails, assume outdated if versions differ
                         if plugin_latest_version != plugin_file_version:
                             plugin_is_outdated = True
@@ -788,7 +790,7 @@ def search_plugin_modrinth(plugin_file: str, plugin_file_name: str, plugin_file_
                     plugin_is_outdated = False
                     try:
                         plugin_is_outdated = compare_plugin_version(plugin_latest_version, plugin_file_version)
-                    except:
+                    except Exception:
                         # If version comparison fails, assume outdated if versions differ
                         if plugin_latest_version != plugin_file_version:
                             plugin_is_outdated = True
@@ -844,7 +846,7 @@ def search_plugin_github(plugin_file: str, plugin_file_name: str, plugin_file_ve
                     plugin_is_outdated = False
                     try:
                         plugin_is_outdated = compare_plugin_version(plugin_latest_version, plugin_file_version)
-                    except:
+                    except Exception:
                         # If version comparison fails, assume outdated if versions differ
                         if plugin_latest_version != plugin_file_version:
                             plugin_is_outdated = True

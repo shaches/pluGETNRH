@@ -65,7 +65,7 @@ def handle_input(
                     case True:
                         try:
                             get_specific_plugin_spiget(input_selected_object, input_parameter)
-                        except:
+                        except Exception:
                             pass
                     case _:
                         search_specific_plugin_spiget(input_selected_object)

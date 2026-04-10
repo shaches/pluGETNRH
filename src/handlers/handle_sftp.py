@@ -1,5 +1,8 @@
 import sys
 import os
+import hashlib
+import base64
+from pathlib import Path
 import pysftp
 import paramiko
 import stat
@@ -9,15 +12,143 @@ from src.utils.console_output import rich_print_error, rich_print_warning
 from src.handlers.handle_config import config_value
 
 
+def _get_host_key_fingerprint(key: paramiko.PKey) -> str:
+    """
+    Returns a SHA256 fingerprint of a host key in standard Base64 format,
+    matching the output of 'ssh-keygen -l'.
+
+    :param key: Paramiko public key object
+
+    :returns: Fingerprint string in 'SHA256:<base64>' format
+    """
+    key_bytes = key.asbytes()
+    digest = hashlib.sha256(key_bytes).digest()
+    b64_fingerprint = base64.b64encode(digest).rstrip(b'=').decode('ascii')
+    return f"SHA256:{b64_fingerprint}"
+
+
+def _fetch_host_key(server: str, port: int) -> paramiko.PKey:
+    """
+    Connects to the SSH server to retrieve its host key without authenticating.
+
+    :param server: Hostname or IP of the SFTP server
+    :param port: SSH port
+
+    :returns: The server's host key or None if retrieval failed
+    """
+    transport = None
+    try:
+        transport = paramiko.Transport((server, port))
+        transport.connect()
+        host_key = transport.get_remote_server_key()
+        return host_key
+    except Exception:
+        return None
+    finally:
+        if transport:
+            try:
+                transport.close()
+            except Exception:
+                pass
+
+
+def _save_host_key(known_hosts_path: Path, server: str, key: paramiko.PKey) -> None:
+    """
+    Saves a host key to the known_hosts file, creating the file and parent
+    directories if they don't exist.
+
+    :param known_hosts_path: Path to the known_hosts file
+    :param server: Hostname or IP to associate with the key
+    :param key: Paramiko public key to save
+    """
+    known_hosts_path.parent.mkdir(parents=True, exist_ok=True)
+    host_keys = paramiko.HostKeys()
+    if known_hosts_path.exists():
+        try:
+            host_keys.load(str(known_hosts_path))
+        except Exception:
+            pass
+    host_keys.add(server, key.get_name(), key)
+    host_keys.save(str(known_hosts_path))
+
+
 def sftp_create_connection():
     """
-    Creates a sftp connection with the given values in the config file
+    Creates a sftp connection with the given values in the config file.
+    Uses Trust On First Use (TOFU) for host key verification:
+    - If the server's key is in known_hosts, it is verified automatically.
+    - If not, the key fingerprint is shown and the user must confirm before proceeding.
+    - Accepted keys are saved to known_hosts for future verification.
 
     :returns: SFTP connection type
     """
     config_values = config_value()
+    known_hosts_path = Path.home() / ".ssh" / "known_hosts"
     cnopts = pysftp.CnOpts()
-    cnopts.hostkeys = None # TODO fix this
+    cnopts.hostkeys = None
+
+    # Try to load existing known_hosts for verification
+    host_key_verified = False
+    try:
+        loaded_cnopts = pysftp.CnOpts(knownhosts=str(known_hosts_path))
+        # Check if the target server has a key in the loaded file
+        if loaded_cnopts.hostkeys.lookup(config_values.server) is not None:
+            cnopts = loaded_cnopts
+            host_key_verified = True
+    except pysftp.HostKeysException:
+        pass
+
+    if not host_key_verified:
+        # TOFU: fetch the server's host key and ask the user to verify
+        rich_print_warning(
+            f"Warning: [SFTP]: Host key for '{config_values.server}' not found in known_hosts."
+        )
+        host_key = _fetch_host_key(config_values.server, config_values.sftp_port)
+        if host_key is None:
+            rich_print_error("Error: [SFTP]: Could not retrieve host key from server.")
+            rich_print_error("Exiting program...")
+            sys.exit()
+
+        fingerprint = _get_host_key_fingerprint(host_key)
+        rich_print_warning(
+            f"         Server key fingerprint: {fingerprint}"
+        )
+        rich_print_warning(
+            f"         Key type: {host_key.get_name()}"
+        )
+        try:
+            answer = input("Do you want to trust this host key and continue connecting? [y/n] ")
+        except (KeyboardInterrupt, EOFError):
+            print()
+            rich_print_error("Error: [SFTP]: Connection aborted by user.")
+            sys.exit()
+
+        if answer.strip().lower() != "y":
+            rich_print_error("Error: [SFTP]: Host key rejected. Connection aborted.")
+            sys.exit()
+
+        # Save the accepted key to known_hosts
+        try:
+            _save_host_key(known_hosts_path, config_values.server, host_key)
+            rich_print_warning(
+                f"         Host key saved to: {known_hosts_path}"
+            )
+        except OSError as e:
+            rich_print_warning(
+                f"Warning: [SFTP]: Could not save host key: {e}"
+            )
+
+        # Reload cnopts with the newly saved key
+        try:
+            cnopts = pysftp.CnOpts(knownhosts=str(known_hosts_path))
+        except pysftp.HostKeysException:
+            rich_print_warning(
+                "Warning: [SFTP]: Could not reload known_hosts after saving. "
+                "Proceeding with unverified connection."
+            )
+            cnopts = pysftp.CnOpts()
+            cnopts.hostkeys = None
+
     try:
         sftp = pysftp.Connection(config_values.server, username=config_values.username, \
                password=config_values.password, port=config_values.sftp_port, cnopts=cnopts)
@@ -73,7 +204,7 @@ def sftp_upload_file(sftp, path_item) -> None:
             rich_print_warning(f"Warning: [SFTP]: Created '{path_upload_folder}' for you.")
             sftp.chdir(path_upload_folder)
             sftp.put(path_item)
-        except:
+        except Exception:
             rich_print_error(
                 f"Error: [SFTP]: The '{path_upload_folder}' folder couldn't be created or the upload failed!"
             )
@@ -152,11 +283,9 @@ def sftp_download_file(sftp, file) -> None:
     """
     config_values = config_value()
     sftp.cwd(config_values.remote_plugin_folder_on_server)
-    current_directory = os.getcwd()
-    os.chdir('TempSFTPFolder')
-    sftp.get(file)
+    local_path = os.path.abspath(os.path.join('TempSFTPFolder', file))
+    sftp.get(file, localpath=local_path)
     sftp.close()
-    os.chdir(current_directory)
     return None
 
 
@@ -172,7 +301,7 @@ def sftp_validate_file_attributes(sftp, plugin_path) -> bool:
     plugin_sftp_attribute = sftp.lstat(plugin_path)
     if stat.S_ISDIR(plugin_sftp_attribute.st_mode):
         return False
-    elif re.search(r'.jar$', plugin_path):
+    elif re.search(r'\.jar$', plugin_path):
         return True
     else:
         return False

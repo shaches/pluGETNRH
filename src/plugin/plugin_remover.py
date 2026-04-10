@@ -34,7 +34,7 @@ def delete_plugin(plugin_name: str) -> None:
             plugin_list = os.listdir(config_values.path_to_plugin_folder)
     for plugin_file in plugin_list:
         # skip all other plugins
-        if not re.search(plugin_name, plugin_file, re.IGNORECASE):
+        if not re.search(re.escape(plugin_name), plugin_file, re.IGNORECASE):
             continue
 
         try:
@@ -51,6 +51,6 @@ def delete_plugin(plugin_name: str) -> None:
                     pluginPath = Path(f"{config_values.path_to_plugin_folder}/{plugin_file}")
                     os.remove(pluginPath)
             rich_console.print(f"[not bold][bright_green]Successfully removed: [bright_magenta]{plugin_file}")
-        except:
+        except Exception:
             rich_print_error(f"[not bold]Error: Couldn't remove [bright_magenta]{plugin_file}")
     return None

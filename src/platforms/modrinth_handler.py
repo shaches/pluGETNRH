@@ -5,7 +5,7 @@ Handles Modrinth plugin checking, downloading and updating
 import re
 from pathlib import Path
 
-from src.utils.utilities import api_do_request, create_temp_plugin_folder, remove_temp_plugin_folder
+from src.utils.utilities import api_do_request, create_temp_plugin_folder, remove_temp_plugin_folder, sanitize_filename
 from src.utils.console_output import rich_print_error
 from src.plugin.plugin_downloader import get_download_path
 from src.handlers.handle_config import config_value
@@ -151,9 +151,9 @@ def download_modrinth_plugin(project_id: str, featured_only: bool = False, versi
         download_path = get_download_path(config_values)
     # Use original filename if available, otherwise construct one
     if filename:
-        plugin_download_name = filename
+        plugin_download_name = sanitize_filename(filename)
     else:
-        plugin_download_name = f"{plugin_name}-{version}.jar"
+        plugin_download_name = sanitize_filename(f"{plugin_name}-{version}.jar")
     
     download_plugin_path = Path(f"{download_path}/{plugin_download_name}")
     
@@ -173,6 +173,7 @@ def _download_modrinth_file(url: str, download_path: Path) -> None:
     """
     import os
     import requests
+    import zipfile
     from zipfile import ZipFile
     from rich.console import Console
     from rich.progress import Progress
@@ -185,7 +186,7 @@ def _download_modrinth_file(url: str, download_path: Path) -> None:
     # Use rich Progress() to create progress bar (same as existing implementations)
     with Progress(transient=True) as progress:
         header = {'user-agent': 'pluGET/1.0'}
-        r = requests.get(url, headers=header, stream=True)
+        r = requests.get(url, headers=header, stream=True, timeout=30)
         try:
             file_size = int(r.headers.get('content-length'))
             # create progress bar
@@ -231,7 +232,7 @@ def _download_modrinth_file(url: str, download_path: Path) -> None:
                     plugin_valid = True
                 except KeyError:
                     pass
-    except:
+    except (zipfile.BadZipFile, OSError):
         pass
     
     if not plugin_valid:

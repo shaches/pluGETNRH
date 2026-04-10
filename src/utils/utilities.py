@@ -8,7 +8,8 @@ import os
 import sys
 import shutil
 import re
-from pathlib import Path
+import uuid
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional, Union, cast
 
 import requests
@@ -18,6 +19,11 @@ from rich.table import Table
 from src.handlers.handle_sftp import sftp_create_connection
 from src.handlers.handle_ftp import ftp_create_connection
 from src.utils.console_output import rich_print_error
+
+_WINDOWS_RESERVED_RE = re.compile(
+    r'^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$',
+    re.IGNORECASE | re.ASCII
+)
 # Assuming circular import management is handled by Python's import system or
 # ConfigValue is imported inside functions where needed if circular dep exists.
 # For this refactor, we import ConfigValue for type hints.
@@ -228,6 +234,59 @@ def remove_temp_plugin_folder() -> None:
     except OSError as e:
         rich_print_error(f"Error: {e.filename} - {e.strerror}")
     return None
+
+
+def sanitize_filename(filename: str) -> str:
+    """Sanitizes a filename to prevent path traversal and shell injection attacks.
+
+    Handles filenames received from external sources (APIs, user input) by:
+    - Stripping directory components in a platform-independent way
+    - Recursively removing path traversal sequences
+    - Filtering characters via an allow-list (alphanumeric, dot, hyphen, underscore)
+    - Guarding against Windows reserved device names
+
+    Args:
+        filename (str): The raw filename to sanitize.
+
+    Returns:
+        str: A safe filename containing only permitted characters.
+    """
+    # Strip directory components using PurePosixPath after normalising Windows
+    # separators, so both /unix/style and C:\windows\style paths are handled
+    # regardless of the host OS
+    filename = PurePosixPath(filename.replace('\\', '/')).name
+    # Recursively remove path traversal sequences to defeat nested payloads (e.g. '....//') 
+    previous = None
+    while previous != filename:
+        previous = filename
+        filename = filename.replace('..', '')
+    # Allow-list: keep only ASCII alphanumeric characters, dots, hyphens, and underscores
+    filename = re.sub(r'[^a-zA-Z0-9_.\-]', '', filename)
+    # Strip trailing dots and spaces that Windows silently strips (e.g. 'CON.' -> 'CON')
+    filename = filename.rstrip('. ')
+    # Guard against Windows reserved device names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
+    if _WINDOWS_RESERVED_RE.match(filename):
+        filename = f"_{filename}"
+    # Truncate to 255 characters (common filesystem limit), preserving the extension
+    max_length = 255
+    max_ext_length = 16
+    if len(filename) > max_length:
+        path_obj = Path(filename)
+        # suffix includes the dot (e.g., '.jar')
+        suffix = path_obj.suffix[:max_ext_length + 1] if path_obj.suffix else ""
+        stem = path_obj.stem
+        # max(0, ...) prevents negative slicing if max_length is very small
+        stem_limit = max(0, max_length - len(suffix))
+        # If there's no stem (e.g. filename was just an extension),
+        # fallback to simple truncation of the original string
+        if not stem and suffix:
+            filename = filename[:max_length]
+        else:
+            filename = f"{stem[:stem_limit]}{suffix}"
+    # Ensure the filename isn't empty after sanitization
+    if not filename:
+        filename = f"downloaded_{uuid.uuid4().hex[:8]}.jar"
+    return filename
 
 
 def convert_file_size_down(file_size: Union[int, float]) -> float:
